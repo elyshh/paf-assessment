@@ -1,0 +1,120 @@
+Write your Task 2 answers in this file
+
+Task 2.1
+mongoimport -hlocalhost --port=27017 -dbedandbreakfast -clistings_and_reviews --file=listings.json
+
+db.getCollection("listings_and_reviews").find({})
+
+// Task 2.2 - Filter all Australian accomodations and create "listings" collection
+db.listings_and_reviews.aggregate([
+    {
+        $match: {
+            "address.country": {
+                $regex: "Australia",
+                $options: "i"
+              }
+        }
+    },
+    {
+        $out: "listings"
+    }
+])
+
+db.listings_and_reviews.drop();
+db.getCollection("listings").find({})
+
+// Task 2.3 - Extract reviews from Australian listings collections and save into "reviews" collection
+db.listings.aggregate([
+    {
+        $unwind: "$reviews"
+    },
+    {
+        $addFields: {
+          "reviews.comments": { 
+              $replaceAll: {
+                  input: { 
+                      $replaceAll: { input: "$reviews.comments", find: "\n", replacement: "" }
+                  },
+                  find: "\r",
+                  replacement: ""
+              }
+          },
+          "reviews.reviewer_name": {
+              $replaceAll: { input: "$reviews.reviewer_name", find: ",", replacement: "" }
+          }
+        }
+    },
+    {
+        $project: {
+            "_id": "$reviews._id",
+            "date": "$reviews.date",
+            "listing_id": "$_id",
+            "reviewer_name": "$reviews.reviewer_name",
+            "comments": "$reviews.comments"
+        }
+    },
+    {
+        $out: "reviews"
+    }
+])
+
+db.getCollection("reviews").find({})
+
+// Task 2.4 - Delete reviews attribute from listings collection
+db.listings.updateMany(
+   { },
+   { $unset: { reviews: "" } }
+)
+
+db.getCollection("listings").find({})
+
+Task 2.5
+mongoexport --db=bedandbreakfast --collection=reviews --out=reviews.csv --type=csv --fields=date,listing_id,reviewer_name,comments --query='{}'
+
+- FOR REFERENCE -
+Task 3 - Retrieve a list of suburbs from "address.suburb' in "listings" collection
+db.listings.aggregate([
+    {
+        $match: {
+            "address.country": {
+                $regex: "Australia",
+                $options: "i"
+            }
+        }
+    },
+    {
+        $match: {
+            "address.suburb": {
+                $nin: [""]
+            }
+        }
+    },
+    {
+        $group: {
+            _id: "$address.suburb"
+        }
+    }
+])
+
+// Task 4 - Retrieve all listings that match the criterias
+db.listings.aggregate([
+    {
+        $match: {
+            "address.suburb": { $regex: "Lilyfield/Rozelle", $options: "i" },
+            "price": { $lte: NumberDecimal("250.00") },
+            "accommodates": { $lte: 2 },
+            "min_nights": { $gte: 2 }
+        }
+    },    
+    {
+        $project: {
+            "_id": 1,
+            "name": 1,
+            "accommodates": 1,
+            "price": 1
+        }
+    },
+    {
+        $sort: { "price": -1 }
+    }
+])
